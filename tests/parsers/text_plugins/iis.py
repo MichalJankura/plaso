@@ -236,6 +236,76 @@ class WinIISTextPluginTest(test_lib.TextPluginTestCase):
         )
         self.assertEqual(number_of_warnings, 0)
 
+    def testProcessWithIIS10LogAndExploitationAttempts(self):
+        """Tests the Process function with an IIS 10 log file with exploitation
+        attempts."""
+        plugin = iis.WinIISTextPlugin()
+        storage_writer = self._ParseTextFileWithPlugin(
+            ["iis", "iis10_exploitation.log"], plugin
+        )
+
+        # The log file contains more consecutive exploitation attempts than
+        # _MAXIMUM_CONSECUTIVE_LINE_FAILURES, followed by a regular request,
+        # hence lines that are not parsed would cause the remainder of the file
+        # to be skipped.
+        number_of_event_data = storage_writer.GetNumberOfAttributeContainers(
+            "event_data"
+        )
+        self.assertEqual(number_of_event_data, 29)
+
+        number_of_warnings = storage_writer.GetNumberOfAttributeContainers(
+            "extraction_warning"
+        )
+        self.assertEqual(number_of_warnings, 0)
+
+        number_of_warnings = storage_writer.GetNumberOfAttributeContainers(
+            "recovery_warning"
+        )
+        self.assertEqual(number_of_warnings, 0)
+
+        # URI stem with "~".
+        expected_event_values = {
+            "data_type": "iis:log:line",
+            "requested_uri_stem": "/~login",
+        }
+
+        event_data = storage_writer.GetAttributeContainerByIndex("event_data", 0)
+        self.CheckEventData(event_data, expected_event_values)
+
+        # URI stem with "!", "%" and "*".
+        expected_event_values = {
+            "data_type": "iis:log:line",
+            "requested_uri_stem": (
+                "/Page%'+AND+2*3*8=6*8+AND+'oLjH'!='oLjH%/CookiePolicy"
+            ),
+        }
+
+        event_data = storage_writer.GetAttributeContainerByIndex("event_data", 3)
+        self.CheckEventData(event_data, expected_event_values)
+
+        # URI query and user agent with "#", which is used in the default user
+        # agent of sqlmap.
+        expected_event_values = {
+            "cs_uri_query": "q=1'+OR+'1'='1'--+!*#{}|^~[]<>@$",
+            "data_type": "iis:log:line",
+            "requested_uri_stem": "/search.aspx",
+            "user_agent": "sqlmap/1.8.3#stable+(https://sqlmap.org)",
+        }
+
+        event_data = storage_writer.GetAttributeContainerByIndex("event_data", 5)
+        self.CheckEventData(event_data, expected_event_values)
+
+        # Regular request after the exploitation attempts.
+        expected_event_values = {
+            "data_type": "iis:log:line",
+            "last_written_time": "2026-01-17T19:30:00+00:00",
+            "requested_uri_stem": "/default.aspx",
+            "source_ip": "192.0.2.99",
+        }
+
+        event_data = storage_writer.GetAttributeContainerByIndex("event_data", 28)
+        self.CheckEventData(event_data, expected_event_values)
+
 
 if __name__ == "__main__":
     unittest.main()

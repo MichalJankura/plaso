@@ -125,23 +125,25 @@ class WinIISTextPlugin(interface.TextPlugin):
 
     _URI = pyparsing.Word(pyparsing.alphanums + _URI_SAFE_CHARACTERS) | _BLANK
 
-    _URI_STEM = (
-        pyparsing.Word(pyparsing.alphanums + _URI_SAFE_CHARACTERS + "$") | _BLANK
-    )
+    # Values of fields that are provided by the client, such as the URI stem,
+    # query, user agent, cookie and referrer, are logged as received and can
+    # contain any non-whitespace character, for example characters used in SQL
+    # injection attempts. IIS replaces spaces in these values with "+", hence
+    # values are delimited by whitespace instead of restricted to a specific set
+    # of characters. Also note that IIS does not require that a query comply with
+    # RFC1738 restrictions on valid URI characters, per:
+    # https://blogs.iis.net/nazim/use-of-special-characters-like-in-an-iis-url
+    _CLIENT_FIELD_VALUE = pyparsing.Regex(r"[^ \t\r\n]+")
 
-    _UA = pyparsing.Word(pyparsing.alphanums + _URI_SAFE_CHARACTERS + "[]") | _BLANK
+    _URI_STEM = _CLIENT_FIELD_VALUE
 
-    _COOKIE = (
-        pyparsing.Word(pyparsing.alphanums + _URI_SAFE_CHARACTERS + '@{}"\\') | _BLANK
-    )
+    _UA = _CLIENT_FIELD_VALUE
 
-    # Per https://blogs.iis.net/nazim/use-of-special-characters-like-in-an-iis-url
-    # IIS does not require that a query comply with RFC1738 restrictions on valid
-    # URI characters
-    _QUERY = (
-        pyparsing.Word(pyparsing.alphanums + _URI_SAFE_CHARACTERS + "{}|\\^~[]`'\"<>@$")
-        | _BLANK
-    )
+    _COOKIE = _CLIENT_FIELD_VALUE
+
+    _QUERY = _CLIENT_FIELD_VALUE
+
+    _REFERRER = _CLIENT_FIELD_VALUE
 
     _DATE = (
         _FOUR_DIGITS
@@ -234,8 +236,8 @@ class WinIISTextPlugin(interface.TextPlugin):
     _LOG_LINE_STRUCTURES["cs-version"] = _URI.set_results_name("protocol_version")
     _LOG_LINE_STRUCTURES["cs-host"] = _URI.set_results_name("cs_host")
     _LOG_LINE_STRUCTURES["cs(Cookie)"] = _COOKIE.set_results_name("cs_cookie")
-    _LOG_LINE_STRUCTURES["cs(Referrer)"] = _URI.set_results_name("cs_referrer")
-    _LOG_LINE_STRUCTURES["cs(Referer)"] = _URI.set_results_name("cs_referrer")
+    _LOG_LINE_STRUCTURES["cs(Referrer)"] = _REFERRER.set_results_name("cs_referrer")
+    _LOG_LINE_STRUCTURES["cs(Referer)"] = _REFERRER.set_results_name("cs_referrer")
 
     # Define the available log line structures. Default to the IIS v. 6.0
     # common format.
